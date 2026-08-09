@@ -11,6 +11,7 @@
     "import-data": "node scripts/import_data.mjs"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "lucide-react": "1.28.0",
     "next": "16.2.12",
     "react": "19.2.8",
