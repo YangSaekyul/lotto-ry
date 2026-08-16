@@ -57,8 +57,30 @@ def normalize_draw(item: dict) -> dict:
     }
 
 
-def fetch_all_draws(latest: int) -> list[dict]:
-    collected: dict[int, dict] = {}
+def load_existing_draws() -> dict[int, dict]:
+    path = DATA / "official_draw_results_all.json"
+    if not path.exists():
+        return {}
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return {int(item["draw_no"]): item for item in payload.get("draws", [])}
+
+
+def load_existing_stores() -> list[dict]:
+    path = DATA / "official_winning_stores_current.json"
+    if not path.exists():
+        return []
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return list(payload.get("records", []))
+
+
+def fetch_all_draws(latest: int, existing: dict[int, dict]) -> list[dict]:
+    """Fetch only missing recent draws during normal weekly refreshes.
+
+    The historical range is immutable after publication. Re-downloading all
+    1,000+ draws weekly turns one transient official-site timeout into a full
+    refresh failure, so preserve verified local history and fetch its gap only.
+    """
+    collected = dict(existing)
     first = request_json("/lt645/selectPstLt645InfoNew.do", {"srchDir": "center", "srchLtEpsd": latest})["list"]
     for item in first:
         draw = normalize_draw(item)
@@ -82,9 +104,12 @@ def fetch_all_draws(latest: int) -> list[dict]:
     return draws
 
 
-def fetch_recent_stores(latest: int) -> list[dict]:
-    records: list[dict] = []
+def fetch_recent_stores(latest: int, existing: list[dict]) -> list[dict]:
+    existing_draws = {int(item["draw_no"]) for item in existing}
+    records = [item for item in existing if int(item["draw_no"]) <= latest]
     for draw_no in range(STORE_HISTORY_START, latest + 1):
+        if draw_no in existing_draws:
+            continue
         for rank in range(1, 6):
             result = request_json("/wnprchsplcsrch/selectLtWnShp.do", {"srchWnShpRnk": rank, "srchLtEpsd": draw_no})
             for item in result.get("list", []):
@@ -107,8 +132,8 @@ def main() -> None:
     DATA.mkdir(parents=True, exist_ok=True)
     latest = discover_latest_draw()
     refreshed_at = datetime.now(timezone.utc).isoformat()
-    draws = fetch_all_draws(latest)
-    stores = fetch_recent_stores(latest)
+    draws = fetch_all_draws(latest, load_existing_draws())
+    stores = fetch_recent_stores(latest, load_existing_stores())
     meta = {"source": BASE, "refreshed_at": refreshed_at, "draw_range": [1, latest]}
     (DATA / "official_draw_results_all.json").write_text(
         json.dumps({**meta, "draws": draws}, ensure_ascii=False, indent=2), encoding="utf-8"

@@ -18,7 +18,10 @@ type StoreMiniMapProps = {
 
 export function StoreMiniMap({ store }: StoreMiniMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<any>(null);
+  const mapInstanceRef = useRef<{
+    setCenter: (center: unknown) => void;
+    destroy?: () => void;
+  } | null>(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
 
   const directionsUrl = buildNaverDirectionsUrl(store);
